@@ -12,7 +12,6 @@ class Program
     static void Main()
     {
         string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project"; // Path to search for ZIP files
-        string outputFilePath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project\\output.xlsx";
 
         // Extract and load final.dbf
         string finalDbfPath = ExtractSpecificDBFFromAnyZip(folderPath, "final.dbf");
@@ -51,6 +50,12 @@ class Program
         string invDate = todayDbfTable.Rows[0][0].ToString();  // First column (inv_date)
         string storeNum = todayDbfTable.Rows[0][6].ToString(); // Seventh column (store_num)
 
+        // Extract the last 3 digits of the store_num
+        string storeSuffix = storeNum.Length >= 3 ? storeNum.Substring(storeNum.Length - 3) : storeNum;
+
+        // Create the dynamic filename
+        string outputFilePath = $"C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project\\BIS{storeSuffix}.xlsx";
+
         // Create a mapping of EmpId -> (Last_Name, First_Name)
         var employeeMap = employeeDbfTable.AsEnumerable()
             .ToDictionary(
@@ -71,6 +76,7 @@ class Program
         Console.WriteLine("Press any key to exit...");
         Console.ReadKey();
     }
+
 
     static string ExtractSpecificDBFFromAnyZip(string folderPath, string targetDbfFileName)
     {
@@ -179,14 +185,14 @@ class Program
 
             // Add headers
             worksheet.Cells[1, 1].Value = "Employee";
-            worksheet.Cells[1, 2].Value = "CountRecord";
-            worksheet.Cells[1, 3].Value = "TotalExtQty";
-            worksheet.Cells[1, 4].Value = "TotalExtPrice";
-            worksheet.Cells[1, 5].Value = "EmpId";
-            worksheet.Cells[1, 6].Value = "Last_Name";
-            worksheet.Cells[1, 7].Value = "First_Name";
-            worksheet.Cells[1, 14].Value = "InvDate";
-            worksheet.Cells[1, 20].Value = "StoreNum";
+            worksheet.Cells[1, 2].Value = "Count_Record";
+            worksheet.Cells[1, 3].Value = "Total_Ext_Qty";
+            worksheet.Cells[1, 4].Value = "Total_Ext_Price";
+            worksheet.Cells[1, 5].Value = "EMP_ID";
+            worksheet.Cells[1, 6].Value = "LAST_NAME";
+            worksheet.Cells[1, 7].Value = "FIRST_NAME";
+            worksheet.Cells[1, 14].Value = "INV_DATE";
+            worksheet.Cells[1, 20].Value = "STORE_NUM";
 
             // Add data
             int row = 2;

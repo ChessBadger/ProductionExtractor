@@ -14,13 +14,15 @@ class Program
         {
 
         // Get the user's home directory dynamically
-        //string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
+        // Define the dynamic folder path
+        string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - ProductionReports");
 
-        string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
+        //string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
 
-            // Get all ZIP files in the folder
-            var zipFiles = Directory.GetFiles(folderPath, "*.zip");
+        // Get all ZIP files in the folder
+        var zipFiles = Directory.GetFiles(folderPath, "*.zip");
             if (zipFiles.Length == 0)
             {
                 Console.WriteLine("No ZIP files found in the specified folder.");
@@ -75,13 +77,13 @@ class Program
                 string storeSuffix = storeNum.Length >= 3 ? storeNum.Substring(storeNum.Length - 3) : storeNum;
 
             // Create the dynamic filename
-            //string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
+            string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
 
             // Create the dynamic filename using the ZIP file name and store suffix
-            string outputFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(zipFilePath)}_BIS{storeSuffix}.xlsx");
+            //string outputFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(zipFilePath)}_BIS{storeSuffix}.xlsx");
 
-                // Create a mapping of EmpId -> (Last_Name, First_Name)
-                var employeeMap = employeeDbfTable.AsEnumerable()
+            // Create a mapping of EmpId -> (Last_Name, First_Name)
+            var employeeMap = employeeDbfTable.AsEnumerable()
                     .ToDictionary(
                         row => row[0].ToString(), // EmpId is in the first column
                         row => (dynamic)new

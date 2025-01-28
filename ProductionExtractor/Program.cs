@@ -13,10 +13,10 @@ class Program
     static void Main()
     {
 
-        // Get the user's home directory dynamically
+        //// Get the user's home directory dynamically
         //string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        // Define the dynamic folder path
+        ////Define the dynamic folder path
         //string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - ProductionReports");
 
         string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
@@ -80,7 +80,7 @@ class Program
             //string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
 
             // Create the dynamic filename based on the ZIP file name
-            string outputFileName = Path.GetFileNameWithoutExtension(zipFilePath) + ".xlsx";
+            string outputFileName = Path.GetFileNameWithoutExtension(zipFilePath) + ".XLSX";
             string outputFilePath = Path.Combine(folderPath, outputFileName);
 
 
@@ -180,15 +180,17 @@ class Program
                 TotalExtQty = g.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
                 TotalExtPrice = g.Sum(r => Convert.ToDecimal(r["price"]) * Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
                 EmpId = g.Key,
-                LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "Unknown",
-                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "Unknown",
+                LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "",
+                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "",
                 InvDate = parsedInvDate, // Store as DateTime
-                StoreNum = storeNum
+                StoreNum = storeNum,
+                LastSerial = g.Last()["serial"].ToString() // Extract the last serial value for the group
             })
             .ToList<dynamic>();
 
         return results;
     }
+
 
 
 
@@ -198,7 +200,7 @@ class Program
 
         using (var package = new ExcelPackage())
         {
-            var worksheet = package.Workbook.Worksheets.Add("Employee Summary");
+            var worksheet = package.Workbook.Worksheets.Add("EMP_RPT");
 
             // Add headers
             worksheet.Cells[1, 1].Value = "Employee";
@@ -208,8 +210,21 @@ class Program
             worksheet.Cells[1, 5].Value = "EMP_ID";
             worksheet.Cells[1, 6].Value = "LAST_NAME";
             worksheet.Cells[1, 7].Value = "FIRST_NAME";
+            worksheet.Cells[1, 8].Value = "MID_INIT";
+            worksheet.Cells[1, 9].Value = "SEC_NAME";
+            worksheet.Cells[1, 10].Value = "SSN";
+            worksheet.Cells[1, 11].Value = "STATUS";
+            worksheet.Cells[1, 12].Value = "RATE";
+            worksheet.Cells[1, 13].Value = "HOURS";
             worksheet.Cells[1, 14].Value = "INV_DATE";
+            worksheet.Cells[1, 15].Value = "TIME_IN";
+            worksheet.Cells[1, 16].Value = "TIME_OUT";
+            worksheet.Cells[1, 17].Value = "LAST_INV_DATE";
+            worksheet.Cells[1, 18].Value = "TEAM_LEADER";
+            worksheet.Cells[1, 19].Value = "NO_TEAM";
             worksheet.Cells[1, 20].Value = "STORE_NUM";
+            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for the serial
+
 
             // Add data
             int row = 2;
@@ -224,6 +239,8 @@ class Program
                 worksheet.Cells[row, 7].Value = item.FirstName;
                 worksheet.Cells[row, 14].Value = item.InvDate;
                 worksheet.Cells[row, 20].Value = item.StoreNum;
+                worksheet.Cells[row, 21].Value = item.LastSerial; // Add serial value
+
 
                 row++;
             }

@@ -77,17 +77,22 @@ class Program
             string storeSuffix = storeNum.Length >= 3 ? storeNum.Substring(storeNum.Length - 3) : storeNum;
 
             // Create the dynamic filename
-            string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
+            //string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
+
+            string outputFilePath = Path.Combine(folderPath, zipFilePath);
+
 
             // Create a mapping of EmpId -> (Last_Name, First_Name)
             var employeeMap = employeeDbfTable.AsEnumerable()
-                    .ToDictionary(
-                        row => row[0].ToString(), // EmpId is in the first column
-                        row => (dynamic)new
-                        {
-                            LastName = row[1].ToString(),  // Last_Name is in the second column
-                            FirstName = row[2].ToString() // First_Name is in the third column
-                        });
+    .GroupBy(row => row[0].ToString()) // Group by EmpId
+    .ToDictionary(
+        g => g.Key, // Use the key from the group
+        g => (dynamic)new
+        {
+            LastName = g.Last()[1].ToString(),  // Take the last entry for Last_Name
+            FirstName = g.Last()[2].ToString() // Take the last entry for First_Name
+        });
+
 
             // Process final.dbf and add inv_date and store_num
             var results = ProcessAndEnrichData(finalDbfTable, employeeMap, invDate, storeNum);
@@ -221,13 +226,17 @@ class Program
                 row++;
             }
 
-            // Apply formatting
-            worksheet.Cells[2, 3, row - 1, 3].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtQty with commas and 4 decimal places
-            worksheet.Cells[2, 4, row - 1, 4].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtPrice with commas and 4 decimal places
-            worksheet.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy"; // Format InvDate as mm/dd/yy
+            // Only apply formatting if there is data in the worksheet
+            if (row > 2) // Check if data rows were added (row = 2 means no data)
+            {
+                // Format specific columns
+                worksheet.Cells[2, 3, row - 1, 3].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtQty
+                worksheet.Cells[2, 4, row - 1, 4].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtPrice
+                worksheet.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy"; // Format InvDate as mm/dd/yy
 
-            // Auto-fit columns for better readability
-            worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+                // Auto-fit columns for better readability
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+            }
 
             // Save file
             package.SaveAs(new FileInfo(filePath));

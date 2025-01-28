@@ -79,7 +79,9 @@ class Program
             // Create the dynamic filename
             //string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
 
-            string outputFilePath = Path.Combine(folderPath, zipFilePath);
+            // Create the dynamic filename based on the ZIP file name
+            string outputFileName = Path.GetFileNameWithoutExtension(zipFilePath) + ".xlsx";
+            string outputFilePath = Path.Combine(folderPath, outputFileName);
 
 
             // Create a mapping of EmpId -> (Last_Name, First_Name)

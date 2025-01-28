@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.IO.Compression; // For working with zip files
@@ -24,7 +23,6 @@ class Program
             Console.ReadKey();
             return;
         }
-
         DataTable finalDbfTable = ReadDBF(finalDbfPath);
 
         // Extract and load employee.dbf
@@ -36,8 +34,22 @@ class Program
             Console.ReadKey();
             return;
         }
-
         DataTable employeeDbfTable = ReadDBF(employeeDbfPath);
+
+        // Extract and load today.dbf
+        string todayDbfPath = ExtractSpecificDBFFromAnyZip(folderPath, "today.dbf");
+        if (todayDbfPath == null)
+        {
+            Console.WriteLine("today.dbf not found in any ZIP file in the specified folder.");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
+            return;
+        }
+        DataTable todayDbfTable = ReadDBF(todayDbfPath);
+
+        // Extract the inv_date and store_num from the first row of today.dbf
+        string invDate = todayDbfTable.Rows[0][0].ToString();  // First column (inv_date)
+        string storeNum = todayDbfTable.Rows[0][6].ToString(); // Seventh column (store_num)
 
         // Create a mapping of EmpId -> (Last_Name, First_Name)
         var employeeMap = employeeDbfTable.AsEnumerable()
@@ -49,8 +61,8 @@ class Program
                     FirstName = row[2].ToString() // First_Name is in the third column
                 });
 
-        // Process final.dbf and join with employee.dbf data
-        var results = ProcessAndEnrichData(finalDbfTable, employeeMap);
+        // Process final.dbf and add inv_date and store_num
+        var results = ProcessAndEnrichData(finalDbfTable, employeeMap, invDate, storeNum);
 
         // Write enriched data to Excel
         WriteToExcel(outputFilePath, results);
@@ -127,8 +139,16 @@ class Program
         return table;
     }
 
-    static List<dynamic> ProcessAndEnrichData(DataTable dbfTable, Dictionary<string, dynamic> employeeMap)
+    static List<dynamic> ProcessAndEnrichData(DataTable dbfTable, Dictionary<string, dynamic> employeeMap, string invDate, string storeNum)
     {
+        // Parse invDate as DateTime
+        DateTime parsedInvDate;
+        if (!DateTime.TryParse(invDate, out parsedInvDate))
+        {
+            // If parsing fails, assign a default value (e.g., DateTime.MinValue)
+            parsedInvDate = DateTime.MinValue;
+        }
+
         var results = dbfTable.AsEnumerable()
             .GroupBy(row => row["employee"].ToString())
             .Select(g => new
@@ -139,12 +159,15 @@ class Program
                 TotalExtPrice = g.Sum(r => Convert.ToDecimal(r["price"]) * Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
                 EmpId = g.Key,
                 LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "Unknown",
-                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "Unknown"
+                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "Unknown",
+                InvDate = parsedInvDate, // Store as DateTime
+                StoreNum = storeNum
             })
             .ToList<dynamic>();
 
         return results;
     }
+
 
     static void WriteToExcel(string filePath, List<dynamic> data)
     {
@@ -162,6 +185,8 @@ class Program
             worksheet.Cells[1, 5].Value = "EmpId";
             worksheet.Cells[1, 6].Value = "Last_Name";
             worksheet.Cells[1, 7].Value = "First_Name";
+            worksheet.Cells[1, 14].Value = "InvDate";
+            worksheet.Cells[1, 20].Value = "StoreNum";
 
             // Add data
             int row = 2;
@@ -174,11 +199,23 @@ class Program
                 worksheet.Cells[row, 5].Value = item.EmpId;
                 worksheet.Cells[row, 6].Value = item.LastName;
                 worksheet.Cells[row, 7].Value = item.FirstName;
+                worksheet.Cells[row, 14].Value = item.InvDate;
+                worksheet.Cells[row, 20].Value = item.StoreNum;
+
                 row++;
             }
+
+            // Apply formatting
+            worksheet.Cells[2, 3, row - 1, 3].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtQty with commas and 4 decimal places
+            worksheet.Cells[2, 4, row - 1, 4].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtPrice with commas and 4 decimal places
+            worksheet.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy"; // Format InvDate as mm/dd/yy
+
+            // Auto-fit columns for better readability
+            worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
 
             // Save file
             package.SaveAs(new FileInfo(filePath));
         }
     }
+
 }

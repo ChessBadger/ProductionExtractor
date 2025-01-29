@@ -103,6 +103,20 @@ class Program
             WriteToExcel(outputFilePath, results);
 
             Console.WriteLine($"Data successfully extracted and written to {outputFilePath}.");
+
+            // If the output file is successfully created, delete the temp folder
+            if (File.Exists(outputFilePath))
+            {
+                try
+                {
+                    Directory.Delete(tempFolder, true);
+                    Console.WriteLine($"Temporary folder {tempFolder} deleted successfully.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete temporary folder {tempFolder}: {ex.Message}");
+                }
+            }
         }
 
         Console.WriteLine("All ZIP files processed.");

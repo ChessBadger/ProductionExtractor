@@ -104,17 +104,17 @@ class Program
 
             Console.WriteLine($"Data successfully extracted and written to {outputFilePath}.");
 
-            // If the output file is successfully created, delete the temp folder
+            // If the output file is successfully created, delete the ZIP file
             if (File.Exists(outputFilePath))
             {
                 try
                 {
-                    Directory.Delete(tempFolder, true);
-                    Console.WriteLine($"Temporary folder {tempFolder} deleted successfully.");
+                    File.Delete(zipFilePath);
+                    Console.WriteLine($"ZIP file {zipFilePath} deleted successfully.");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to delete temporary folder {tempFolder}: {ex.Message}");
+                    Console.WriteLine($"Failed to delete ZIP file {zipFilePath}: {ex.Message}");
                 }
             }
         }

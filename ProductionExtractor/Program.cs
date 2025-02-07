@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression; // For working with zip files
 using System.Linq;
@@ -18,6 +19,9 @@ class Program
 
         ////Define the dynamic folder path
         string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - DATABASE", "ProductionReports");
+
+        string errorLogFile = Path.Combine(folderPath, "errors.txt");
+
 
         //string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
 
@@ -123,7 +127,8 @@ class Program
             var results = ProcessAndEnrichData(finalDbfTable, employeeMap, invDate, storeNum);
 
             // Write enriched data to Excel
-            WriteToExcel(outputFilePath, results);
+            WriteToExcel(outputFilePath, results, zipFilePath, errorLogFile);
+
 
             Console.WriteLine($"Data successfully extracted and written to {outputFilePath}.");
 
@@ -231,7 +236,7 @@ class Program
 
 
 
-    static void WriteToExcel(string filePath, List<dynamic> data)
+    static void WriteToExcel(string filePath, List<dynamic> data, string zipFilePath, string errorLogFile)
     {
         OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
 
@@ -247,21 +252,9 @@ class Program
             worksheet.Cells[1, 5].Value = "EMP_ID";
             worksheet.Cells[1, 6].Value = "LAST_NAME";
             worksheet.Cells[1, 7].Value = "FIRST_NAME";
-            worksheet.Cells[1, 8].Value = "MID_INIT";
-            worksheet.Cells[1, 9].Value = "SEC_NAME";
-            worksheet.Cells[1, 10].Value = "SSN";
-            worksheet.Cells[1, 11].Value = "STATUS";
-            worksheet.Cells[1, 12].Value = "RATE";
-            worksheet.Cells[1, 13].Value = "HOURS";
             worksheet.Cells[1, 14].Value = "INV_DATE";
-            worksheet.Cells[1, 15].Value = "TIME_IN";
-            worksheet.Cells[1, 16].Value = "TIME_OUT";
-            worksheet.Cells[1, 17].Value = "LAST_INV_DATE";
-            worksheet.Cells[1, 18].Value = "TEAM_LEADER";
-            worksheet.Cells[1, 19].Value = "NO_TEAM";
             worksheet.Cells[1, 20].Value = "STORE_NUM";
-            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for the serial
-
+            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for serial
 
             // Add data
             int row = 2;
@@ -277,18 +270,20 @@ class Program
                 worksheet.Cells[row, 14].Value = item.InvDate;
                 worksheet.Cells[row, 20].Value = item.StoreNum;
                 worksheet.Cells[row, 21].Value = item.LastSerial; // Add serial value
-
-
                 row++;
             }
 
-            // Only apply formatting if there is data in the worksheet
-            if (row > 2) // Check if data rows were added (row = 2 means no data)
+            // If no data was written except headers, log the file name
+            if (row == 2) // No data added, only headers exist
             {
-                // Format specific columns
+                LogError(zipFilePath, errorLogFile);
+            }
+            else
+            {
+                // Apply formatting if data is present
                 worksheet.Cells[2, 3, row - 1, 3].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtQty
                 worksheet.Cells[2, 4, row - 1, 4].Style.Numberformat.Format = "#,##0.0000"; // Format TotalExtPrice
-                worksheet.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy"; // Format InvDate as mm/dd/yy
+                worksheet.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy"; // Format InvDate
 
                 // Auto-fit columns for better readability
                 worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
@@ -298,4 +293,28 @@ class Program
             package.SaveAs(new FileInfo(filePath));
         }
     }
+
+    // Method to log error when output file is blank
+    static void LogError(string zipFilePath, string errorLogFile)
+    {
+        try
+        {
+            string errorMessage = $"Zip File Is Blank: {Path.GetFileName(zipFilePath)}";
+            File.AppendAllText(errorLogFile, errorMessage);
+            Console.WriteLine($"Logged blank output for {Path.GetFileName(zipFilePath)}.");
+
+            // Open the file in Notepad
+            Process.Start(new ProcessStartInfo()
+            {
+                FileName = "notepad.exe",
+                Arguments = errorLogFile,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to log error for {Path.GetFileName(zipFilePath)}: {ex.Message}");
+        }
+    }
+
 }

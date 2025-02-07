@@ -14,12 +14,12 @@ class Program
     {
 
         //// Get the user's home directory dynamically
-        //string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
         ////Define the dynamic folder path
-        //string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - ProductionReports");
+        string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - DATABASE", "ProductionReports");
 
-        string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
+        //string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
 
         // Get all ZIP files in the folder
         var zipFiles = Directory.GetFiles(folderPath, "*.zip");

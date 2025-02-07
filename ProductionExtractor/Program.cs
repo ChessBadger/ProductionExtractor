@@ -34,7 +34,30 @@ class Program
         // Process each ZIP file individually
         foreach (var zipFilePath in zipFiles)
         {
-            Console.WriteLine($"Processing ZIP file: {Path.GetFileName(zipFilePath)}");
+            string zipFileName = Path.GetFileName(zipFilePath);
+            string firstFiveChars = zipFileName.Length >= 5 ? zipFileName.Substring(0, 5) : "";
+
+            // Check if filename should be skipped and deleted
+            if ((firstFiveChars.Equals("0002-", StringComparison.OrdinalIgnoreCase) ||
+                 firstFiveChars.Equals("5001-", StringComparison.OrdinalIgnoreCase)) &&
+                 zipFileName.IndexOf("rx", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                Console.WriteLine($"Skipping and deleting ZIP file: {zipFileName} (Matches filter criteria)");
+
+                try
+                {
+                    File.Delete(zipFilePath);
+                    Console.WriteLine($"ZIP file {zipFileName} deleted successfully.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete ZIP file {zipFileName}: {ex.Message}");
+                }
+
+                continue; // Skip further processing for this file
+            }
+
+            Console.WriteLine($"Processing ZIP file: {zipFileName}");
 
             // Create a temp folder for extracting files
             string tempFolder = Path.Combine(Path.GetTempPath(), "DBFExtraction", Path.GetFileNameWithoutExtension(zipFilePath));

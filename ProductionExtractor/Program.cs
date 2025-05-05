@@ -2,18 +2,18 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression; // For working with zip files
 using System.Linq;
+using System.Text.RegularExpressions;
 using DotNetDBF; // Install DotNetDBF NuGet package
 using OfficeOpenXml; // Install EPPlus NuGet package
 
 class Program
 {
-
     static void Main()
     {
-
         //// Get the user's home directory dynamically
         string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -21,9 +21,6 @@ class Program
         string folderPath = Path.Combine(userProfilePath, "BADGER INVENTORY SERVICE, INC", "BIS - DATABASE", "ProductionReports");
 
         string errorLogFile = Path.Combine(folderPath, "errors.txt");
-
-
-        //string folderPath = "C:\\Users\\Laptop 122\\Desktop\\Store Prep\\Production extraction project";
 
         // Get all ZIP files in the folder
         var zipFiles = Directory.GetFiles(folderPath, "*.zip");
@@ -47,7 +44,6 @@ class Program
                  zipFileName.IndexOf("rx", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 Console.WriteLine($"Skipping and deleting ZIP file: {zipFileName} (Matches filter criteria)");
-
                 try
                 {
                     File.Delete(zipFilePath);
@@ -57,7 +53,6 @@ class Program
                 {
                     Console.WriteLine($"Failed to delete ZIP file {zipFileName}: {ex.Message}");
                 }
-
                 continue; // Skip further processing for this file
             }
 
@@ -100,35 +95,41 @@ class Program
             string invDate = todayDbfTable.Rows[0][0].ToString();  // First column (inv_date)
             string storeNum = todayDbfTable.Rows[0][6].ToString(); // Seventh column (store_num)
 
-            // Extract the last 3 digits of the store_num
-            string storeSuffix = storeNum.Length >= 3 ? storeNum.Substring(storeNum.Length - 3) : storeNum;
+            // Custom logic for "Kelley" files
+            if (zipFileName.IndexOf("Kelley", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Column T (store_num): first 9 chars of filename, without hyphens
+                if (zipFileName.Length >= 9)
+                    storeNum = zipFileName.Substring(0, 9).Replace("-", "");
 
-            // Create the dynamic filename
-            //string outputFilePath = Path.Combine(folderPath, $"BIS{storeSuffix}.xlsx");
+                // Column N (inv_date): extract 6-digit yymmdd and format as MM/dd/yy
+                var match = Regex.Match(zipFileName, @"\d{6}");
+                if (match.Success && DateTime.TryParseExact(match.Value, new[] { "yyMMdd" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
+                {
+                    invDate = parsedDate.ToString("MM/dd/yy");
+                }
+            }
 
             // Create the dynamic filename based on the ZIP file name
             string outputFileName = Path.GetFileNameWithoutExtension(zipFilePath) + ".XLSX";
             string outputFilePath = Path.Combine(folderPath, outputFileName);
 
-
             // Create a mapping of EmpId -> (Last_Name, First_Name)
             var employeeMap = employeeDbfTable.AsEnumerable()
-    .GroupBy(row => row[0].ToString()) // Group by EmpId
-    .ToDictionary(
-        g => g.Key, // Use the key from the group
-        g => (dynamic)new
-        {
-            LastName = g.Last()[1].ToString(),  // Take the last entry for Last_Name
-            FirstName = g.Last()[2].ToString() // Take the last entry for First_Name
-        });
-
+                .GroupBy(row => row[0].ToString()) // Group by EmpId
+                .ToDictionary(
+                    g => g.Key, // Use the key from the group
+                    g => (dynamic)new
+                    {
+                        LastName = g.Last()[1].ToString(),  // Take the last entry for Last_Name
+                        FirstName = g.Last()[2].ToString()   // Take the last entry for First_Name
+                    });
 
             // Process final.dbf and add inv_date and store_num
             var results = ProcessAndEnrichData(finalDbfTable, employeeMap, invDate, storeNum);
 
             // Write enriched data to Excel
             WriteToExcel(outputFilePath, results, zipFilePath, errorLogFile);
-
 
             Console.WriteLine($"Data successfully extracted and written to {outputFilePath}.");
 
@@ -155,7 +156,6 @@ class Program
     static string ExtractSpecificDBFFromZip(string zipFilePath, string targetDbfFileName, string tempFolder)
     {
         string dbfFilePath = null;
-
         using (ZipArchive archive = ZipFile.OpenRead(zipFilePath))
         {
             foreach (ZipArchiveEntry entry in archive.Entries)
@@ -170,35 +170,29 @@ class Program
                 }
             }
         }
-
         return dbfFilePath; // Null if the file is not found
     }
 
     static DataTable ReadDBF(string filePath)
     {
         DataTable table = new DataTable();
-
         // Open the DBF file as a FileStream
         using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+        using (var reader = new DBFReader(fileStream))
         {
-            using (var reader = new DBFReader(fileStream))
+            // Get column definitions
+            var fields = reader.Fields;
+            foreach (var field in fields)
             {
-                // Get column definitions
-                var fields = reader.Fields;
-                foreach (var field in fields)
-                {
-                    table.Columns.Add(field.Name);
-                }
-
-                // Read rows
-                object[] rowValues;
-                while ((rowValues = reader.NextRecord()) != null)
-                {
-                    table.Rows.Add(rowValues);
-                }
+                table.Columns.Add(field.Name);
+            }
+            // Read rows
+            object[] rowValues;
+            while ((rowValues = reader.NextRecord()) != null)
+            {
+                table.Rows.Add(rowValues);
             }
         }
-
         return table;
     }
 
@@ -207,39 +201,59 @@ class Program
         // Parse invDate as DateTime
         DateTime parsedInvDate;
         if (!DateTime.TryParse(invDate, out parsedInvDate))
-        {
-            // If parsing fails, assign a default value (e.g., DateTime.MinValue)
             parsedInvDate = DateTime.MinValue;
-        }
 
-        var results = dbfTable.AsEnumerable()
-            .Where(row => !string.IsNullOrWhiteSpace(row["employee"].ToString())) // Ignore blank employee values
-            .GroupBy(row => row["employee"].ToString())
-            .Select(g => new
+        // Combine DATE and TIME fields, parse timestamps, and sort by employee then time
+        var parsedRecords = dbfTable.Rows.Cast<DataRow>()
+            .Select(r =>
             {
-                Employee = g.Key,
-                CountRecord = g.Count(),
-                TotalExtQty = g.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
-                TotalExtPrice = g.Sum(r => Convert.ToDecimal(r["price"]) * Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
-                EmpId = g.Key,
-                LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "",
-                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "",
-                InvDate = parsedInvDate, // Store as DateTime
-                StoreNum = storeNum,
-                LastSerial = g.Last()["serial"].ToString() // Extract the last serial value for the group
+                string dtText = $"{r["DATE"]} {r["TIME"]}";
+                DateTime dt;
+                var formats = new[] { "M/d/yyyy H:mm:ss", "MM/dd/yyyy HH:mm:ss" };
+                bool ok = DateTime.TryParseExact(dtText, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt);
+                return new { Row = r, EmpId = r["employee"].ToString(), Dt = dt, Ok = ok };
+            })
+            .Where(x => x.Ok)
+            .OrderBy(x => x.EmpId)
+            .ThenBy(x => x.Dt)
+            .ToList();
+
+        // Group by employee and compute average delta and gaps over 5 minutes
+        var results = parsedRecords
+            .GroupBy(x => x.EmpId)
+            .Select(g =>
+            {
+                var dts = g.Select(x => x.Dt).ToList();
+                var deltas = dts.Zip(dts.Skip(1), (prev, next) => next - prev).ToList();
+
+                double avgDelta = deltas.Any() ? deltas.Average(ts => ts.TotalMinutes) : 0;
+                int gapsOver5 = deltas.Count(ts => ts >= TimeSpan.FromMinutes(5));
+
+                var rows = g.Select(x => x.Row);
+                return new
+                {
+                    Employee = g.Key,
+                    CountRecord = rows.Count(),
+                    TotalExtQty = rows.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
+                    TotalExtPrice = rows.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
+                    EmpId = g.Key,
+                    LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "",
+                    FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "",
+                    InvDate = parsedInvDate,
+                    StoreNum = storeNum,
+                    LastSerial = rows.Last()["serial"].ToString(),
+                    AvgDeltaMinutes = avgDelta,
+                    GapsOver5Min = gapsOver5
+                };
             })
             .ToList<dynamic>();
 
         return results;
     }
 
-
-
-
     static void WriteToExcel(string filePath, List<dynamic> data, string zipFilePath, string errorLogFile)
     {
         OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
-
         using (var package = new ExcelPackage())
         {
             var worksheet = package.Workbook.Worksheets.Add("EMP_RPT");
@@ -252,9 +266,20 @@ class Program
             worksheet.Cells[1, 5].Value = "EMP_ID";
             worksheet.Cells[1, 6].Value = "LAST_NAME";
             worksheet.Cells[1, 7].Value = "FIRST_NAME";
+            worksheet.Cells[1, 8].Value = "MID_INIT";
+            worksheet.Cells[1, 9].Value = "SEC_NAME";
+            worksheet.Cells[1, 10].Value = "SSN";
+            worksheet.Cells[1, 11].Value = "STATUS";
+            worksheet.Cells[1, 12].Value = "RATE";
+            worksheet.Cells[1, 13].Value = "HOURS";
             worksheet.Cells[1, 14].Value = "INV_DATE";
+            worksheet.Cells[1, 15].Value = "TIME_IN";
+            worksheet.Cells[1, 16].Value = "TIME_OUT";
+            worksheet.Cells[1, 17].Value = "LAST_INV_DATE";
+            worksheet.Cells[1, 18].Value = "TEAM_LEADER";
+            worksheet.Cells[1, 19].Value = "NO_TEAM";
             worksheet.Cells[1, 20].Value = "STORE_NUM";
-            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for serial
+            worksheet.Cells[1, 21].Value = "SERIAL";
 
             // Add data
             int row = 2;
@@ -269,12 +294,14 @@ class Program
                 worksheet.Cells[row, 7].Value = item.FirstName;
                 worksheet.Cells[row, 14].Value = item.InvDate;
                 worksheet.Cells[row, 20].Value = item.StoreNum;
-                worksheet.Cells[row, 21].Value = item.LastSerial; // Add serial value
+                worksheet.Cells[row, 21].Value = item.LastSerial;
+                worksheet.Cells[row, 22].Value = item.AvgDeltaMinutes;
+                worksheet.Cells[row, 23].Value = item.GapsOver5Min;
                 row++;
             }
 
             // If no data was written except headers, log the file name
-            if (row == 2) // No data added, only headers exist
+            if (row == 2)
             {
                 LogError(zipFilePath, errorLogFile);
             }
@@ -294,7 +321,6 @@ class Program
         }
     }
 
-    // Method to log error when output file is blank
     static void LogError(string zipFilePath, string errorLogFile)
     {
         try
@@ -316,5 +342,4 @@ class Program
             Console.WriteLine($"Failed to log error for {Path.GetFileName(zipFilePath)}: {ex.Message}");
         }
     }
-
 }

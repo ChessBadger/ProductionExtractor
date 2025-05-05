@@ -279,7 +279,7 @@ class Program
             worksheet.Cells[1, 18].Value = "TEAM_LEADER";
             worksheet.Cells[1, 19].Value = "NO_TEAM";
             worksheet.Cells[1, 20].Value = "STORE_NUM";
-            worksheet.Cells[1, 21].Value = "SERIAL";
+            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for serial
 
             // Add data
             int row = 2;

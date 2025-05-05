@@ -103,7 +103,7 @@ class Program
                           FirstName: g.Last()[2].ToString())
                 );
 
-            // 4) enrich & compute deltas
+            // 4) enrich & compute deltas (including new 10/15‑min gaps)
             var enriched = ProcessAndEnrichData(finalTbl, employeeMap, invDate, storeNum);
 
             // 5) write Excel
@@ -208,8 +208,10 @@ class Program
                     ? intervals.Average(d => d.TotalMinutes)
                     : 0.0;
 
-                // 4) gaps ≥ 5 min
-                int gapCount = intervals.Count(d => d.TotalMinutes >= 5);
+                // 4) gap counts for ≥5, ≥10, ≥15 minutes
+                int gap5 = intervals.Count(d => d.TotalMinutes >= 5);
+                int gap10 = intervals.Count(d => d.TotalMinutes >= 10);
+                int gap15 = intervals.Count(d => d.TotalMinutes >= 15);
 
                 // existing aggregates
                 int countRec = g.Count();
@@ -221,8 +223,8 @@ class Program
 
                 string empId = g.Key;
                 var nameTuple = employeeMap.ContainsKey(empId)
-                                      ? employeeMap[empId]
-                                      : (LastName: "", FirstName: "");
+                                     ? employeeMap[empId]
+                                     : (LastName: "", FirstName: "");
                 string lastSerial = g.Last()["serial"].ToString();
 
                 return new
@@ -238,7 +240,9 @@ class Program
                     StoreNum = storeNum,
                     LastSerial = lastSerial,
                     AvgDelta = avgDelta,
-                    GapCount = gapCount
+                    GapCount = gap5,
+                    Gap10Count = gap10,
+                    Gap15Count = gap15
                 };
             })
             .ToList<dynamic>();
@@ -263,7 +267,8 @@ class Program
                 "EMP_ID","LAST_NAME","FIRST_NAME","MID_INIT","SEC_NAME",
                 "SSN","STATUS","RATE","HOURS","INV_DATE","TIME_IN",
                 "TIME_OUT","LAST_INV_DATE","TEAM_LEADER","NO_TEAM",
-                "STORE_NUM","SERIAL","AVG_DELTA","GAP_COUNT"
+                "STORE_NUM","SERIAL","AVG_DELTA","GAP5_COUNT",
+                "GAP10_COUNT","GAP15_COUNT"
             };
             for (int i = 0; i < headers.Length; i++)
                 ws.Cells[1, i + 1].Value = headers[i];
@@ -284,6 +289,8 @@ class Program
                 ws.Cells[row, 21].Value = x.LastSerial;
                 ws.Cells[row, 22].Value = x.AvgDelta;
                 ws.Cells[row, 23].Value = x.GapCount;
+                ws.Cells[row, 24].Value = x.Gap10Count;
+                ws.Cells[row, 25].Value = x.Gap15Count;
                 row++;
             }
 
@@ -300,6 +307,8 @@ class Program
                 ws.Cells[2, 14, row - 1, 14].Style.Numberformat.Format = "mm/dd/yy";
                 ws.Cells[2, 22, row - 1, 22].Style.Numberformat.Format = "0.00";
                 ws.Cells[2, 23, row - 1, 23].Style.Numberformat.Format = "0";
+                ws.Cells[2, 24, row - 1, 24].Style.Numberformat.Format = "0";
+                ws.Cells[2, 25, row - 1, 25].Style.Numberformat.Format = "0";
 
                 ws.Cells[ws.Dimension.Address].AutoFitColumns();
             }

@@ -201,50 +201,26 @@ class Program
         // Parse invDate as DateTime
         DateTime parsedInvDate;
         if (!DateTime.TryParse(invDate, out parsedInvDate))
+        {
+            // If parsing fails, assign a default value (e.g., DateTime.MinValue)
             parsedInvDate = DateTime.MinValue;
+        }
 
-        // Combine DATE and TIME fields, parse timestamps, and sort by employee then time
-        var parsedRecords = dbfTable.Rows.Cast<DataRow>()
-            .Select(r =>
+        var results = dbfTable.AsEnumerable()
+            .Where(row => !string.IsNullOrWhiteSpace(row["employee"].ToString())) // Ignore blank employee values
+            .GroupBy(row => row["employee"].ToString())
+            .Select(g => new
             {
-                string dtText = $"{r["DATE"]} {r["TIME"]}";
-                DateTime dt;
-                var formats = new[] { "M/d/yyyy H:mm:ss", "MM/dd/yyyy HH:mm:ss" };
-                bool ok = DateTime.TryParseExact(dtText, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt);
-                return new { Row = r, EmpId = r["employee"].ToString(), Dt = dt, Ok = ok };
-            })
-            .Where(x => x.Ok)
-            .OrderBy(x => x.EmpId)
-            .ThenBy(x => x.Dt)
-            .ToList();
-
-        // Group by employee and compute average delta and gaps over 5 minutes
-        var results = parsedRecords
-            .GroupBy(x => x.EmpId)
-            .Select(g =>
-            {
-                var dts = g.Select(x => x.Dt).ToList();
-                var deltas = dts.Zip(dts.Skip(1), (prev, next) => next - prev).ToList();
-
-                double avgDelta = deltas.Any() ? deltas.Average(ts => ts.TotalMinutes) : 0;
-                int gapsOver5 = deltas.Count(ts => ts >= TimeSpan.FromMinutes(5));
-
-                var rows = g.Select(x => x.Row);
-                return new
-                {
-                    Employee = g.Key,
-                    CountRecord = rows.Count(),
-                    TotalExtQty = rows.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
-                    TotalExtPrice = rows.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
-                    EmpId = g.Key,
-                    LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "",
-                    FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "",
-                    InvDate = parsedInvDate,
-                    StoreNum = storeNum,
-                    LastSerial = rows.Last()["serial"].ToString(),
-                    AvgDeltaMinutes = avgDelta,
-                    GapsOver5Min = gapsOver5
-                };
+                Employee = g.Key,
+                CountRecord = g.Count(),
+                TotalExtQty = g.Sum(r => Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
+                TotalExtPrice = g.Sum(r => Convert.ToDecimal(r["price"]) * Convert.ToDecimal(r["units"]) * Convert.ToDecimal(r["quantity2"])),
+                EmpId = g.Key,
+                LastName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].LastName : "",
+                FirstName = employeeMap.ContainsKey(g.Key) ? employeeMap[g.Key].FirstName : "",
+                InvDate = parsedInvDate, // Store as DateTime
+                StoreNum = storeNum,
+                LastSerial = g.Last()["serial"].ToString() // Extract the last serial value for the group
             })
             .ToList<dynamic>();
 
@@ -279,7 +255,7 @@ class Program
             worksheet.Cells[1, 18].Value = "TEAM_LEADER";
             worksheet.Cells[1, 19].Value = "NO_TEAM";
             worksheet.Cells[1, 20].Value = "STORE_NUM";
-            worksheet.Cells[1, 21].Value = "SERIAL"; // New column for serial
+            worksheet.Cells[1, 21].Value = "SERIAL";
 
             // Add data
             int row = 2;
@@ -295,8 +271,6 @@ class Program
                 worksheet.Cells[row, 14].Value = item.InvDate;
                 worksheet.Cells[row, 20].Value = item.StoreNum;
                 worksheet.Cells[row, 21].Value = item.LastSerial;
-                worksheet.Cells[row, 22].Value = item.AvgDeltaMinutes;
-                worksheet.Cells[row, 23].Value = item.GapsOver5Min;
                 row++;
             }
 

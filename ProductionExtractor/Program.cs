@@ -50,10 +50,15 @@ class Program
 
             Console.WriteLine($"Processing: {zipFileName}");
 
+            string safeFolderName = Regex.Replace(Path.GetFileNameWithoutExtension(zipFilePath), @"[<>:""/\\|?*\s]+$", "").Trim();
+            string tempFolder = Path.Combine(Path.GetTempPath(), "DBFExtraction", safeFolderName);
+
+
             // 1) extract three DBFs into a temp folder
-            string tempFolder = Path.Combine(Path.GetTempPath(),
-                                             "DBFExtraction",
-                                             Path.GetFileNameWithoutExtension(zipFilePath));
+            //string tempFolder = Path.Combine(Path.GetTempPath(),
+            //                     "DBFExtraction",
+            //                     Path.GetFileNameWithoutExtension(zipFilePath).Trim());
+
             if (Directory.Exists(tempFolder))
                 Directory.Delete(tempFolder, true);
             Directory.CreateDirectory(tempFolder);
@@ -213,13 +218,16 @@ class Program
                 int gap10 = intervals.Count(d => d.TotalMinutes >= 10);
                 int gap15 = intervals.Count(d => d.TotalMinutes >= 15);
 
+                decimal SafeDecimal(object val) =>
+    val == null || val == DBNull.Value ? 0m : Convert.ToDecimal(val);
+
+
                 // existing aggregates
                 int countRec = g.Count();
-                decimal totalQty = g.Sum(r => Convert.ToDecimal(r["units"]) *
-                                               Convert.ToDecimal(r["quantity2"]));
-                decimal totalPrice = g.Sum(r => Convert.ToDecimal(r["price"]) *
-                                               Convert.ToDecimal(r["units"]) *
-                                               Convert.ToDecimal(r["quantity2"]));
+                decimal totalQty = g.Sum(r => SafeDecimal(r["units"]) * SafeDecimal(r["quantity2"]));
+                decimal totalPrice = g.Sum(r => SafeDecimal(r["price"]) *
+                                                SafeDecimal(r["units"]) *
+                                                SafeDecimal(r["quantity2"]));
 
                 string empId = g.Key;
                 var nameTuple = employeeMap.ContainsKey(empId)
